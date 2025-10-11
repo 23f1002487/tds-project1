@@ -93,15 +93,15 @@ async def debug_config():
         # Try to create a simple agent
         try:
             if config.aipipe_token and config.aipipe_token.strip():
-                # Test AIPIPE configuration
-                test_agent = Agent(
-                    'gpt-4o-mini',
-                    openai_api_key=config.aipipe_token,
-                    openai_base_url=config.aipipe_url
-                )
+                # Test AIPIPE configuration - use environment variables only
+                import os
+                os.environ["OPENAI_API_KEY"] = config.aipipe_token
+                if config.aipipe_url:
+                    os.environ["OPENAI_BASE_URL"] = config.aipipe_url
+                test_agent = Agent('gpt-4o-mini')
             else:
                 # Test OpenAI configuration
-                test_agent = Agent('gpt-4o-mini', openai_api_key=config.openai_api_key)
+                test_agent = Agent('gpt-4o-mini')
             agent_creation_ok = True
         except Exception as e:
             agent_creation_ok = False

@@ -58,31 +58,23 @@ class AIService:
                 os.environ["OPENAI_API_KEY"] = config.aipipe_token
                 self.logger.info("Set OPENAI_API_KEY environment variable for pydantic-ai compatibility")
             
-            # Configure the model with appropriate settings
+            # Configure the model - for pydantic-ai, we set environment variables instead of passing parameters
             if base_url and base_url != "https://api.openai.com/v1":
-                model_config = {
-                    'openai_base_url': base_url,
-                    'openai_api_key': api_token
-                }
-                self.logger.info(f"Using custom AI URL: {base_url}")
-            else:
-                model_config = {
-                    'openai_api_key': api_token
-                }
-                self.logger.info("Using default OpenAI URL")
+                import os
+                os.environ["OPENAI_BASE_URL"] = base_url
+                self.logger.info(f"Set OPENAI_BASE_URL environment variable: {base_url}")
             
+            # Create agents without passing API key parameters (they use environment variables)
             self._code_generator = Agent( #type: ignore
                 model_name,
                 result_type=GeneratedCode,
-                system_prompt=self._get_generation_prompt(),
-                **model_config
+                system_prompt=self._get_generation_prompt()
             )
             
             self._code_reviser = Agent( #type: ignore
                 model_name,
                 result_type=GeneratedCode,
-                system_prompt=self._get_revision_prompt(),
-                **model_config
+                system_prompt=self._get_revision_prompt()
             )
             self.logger.info("Pydantic AI agents initialized successfully")
         except Exception as e:
