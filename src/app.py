@@ -82,6 +82,21 @@ async def health_check():
     }
 
 
+@app.get("/debug")
+async def debug_config():
+    """Debug endpoint to check configuration (remove in production)"""
+    return {
+        "pydantic_ai_available": hasattr(task_processor.ai_service, '_code_generator') and task_processor.ai_service._code_generator is not None,
+        "has_aipipe_token": bool(config.aipipe_token and config.aipipe_token.strip() and config.aipipe_token != "..."),
+        "has_openai_key": bool(config.openai_api_key and config.openai_api_key.strip() and config.openai_api_key != "..."),
+        "has_ai_key": config.has_ai_key,
+        "aipipe_url": config.aipipe_url,
+        "openai_url": config.openai_url,
+        "secret_configured": bool(config.secret_key != "..."),
+        "github_configured": bool(config.github_token != "...")
+    }
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
