@@ -38,10 +38,12 @@ class AIService:
     
     def _initialize_agents(self):
         """Initialize Pydantic AI agents"""
-        model_config = {}
-        model_name = "unknown"
+        model_name = "gpt-4o-mini"  # Default fallback
         
         try:
+            # Ensure environment variables are set for pydantic-ai
+            import os
+            
             # Get AIPIPE_TOKEN and URL (prioritize AIPIPE)
             api_token = config.get_ai_key
             base_url = config.get_ai_url
@@ -50,13 +52,20 @@ class AIService:
                 self.logger.warning("No AIPIPE_TOKEN available")
                 return
             
+            # Always set OPENAI_API_KEY for pydantic-ai compatibility
+            os.environ["OPENAI_API_KEY"] = api_token
+            self.logger.info(f"Set OPENAI_API_KEY environment variable (length: {len(api_token)})")
+            
+            # Set base URL if using AIPIPE
+            if base_url and base_url != "https://api.openai.com/v1":
+                os.environ["OPENAI_BASE_URL"] = base_url
+                self.logger.info(f"Set OPENAI_BASE_URL environment variable: {base_url}")
+            
             self.logger.info(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
             self.logger.info(f"Using API URL: {base_url}")
             
             # Determine model name based on service type - use working models from testing
             working_models = ['gpt-4o-mini', 'gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']
-            
-            model_name = None
             
             if config.aipipe_token and config.aipipe_token.strip():
                 self.logger.info("Using AIPIPE service with standard model names (no openai/ prefix)")
@@ -67,18 +76,6 @@ class AIService:
                 # Using OpenAI directly
                 model_name = working_models[0]  # gpt-4o-mini
                 self.logger.info(f"Using OpenAI service with model: {model_name}")
-            
-            # For AIPIPE, we need to ensure the environment variable is set
-            if config.aipipe_token:
-                import os
-                os.environ["OPENAI_API_KEY"] = config.aipipe_token
-                self.logger.info("Set OPENAI_API_KEY environment variable for pydantic-ai compatibility")
-            
-            # Configure the model - for pydantic-ai, we set environment variables instead of passing parameters
-            if base_url and base_url != "https://api.openai.com/v1":
-                import os
-                os.environ["OPENAI_BASE_URL"] = base_url
-                self.logger.info(f"Set OPENAI_BASE_URL environment variable: {base_url}")
             
             # Create agents without passing API key parameters (they use environment variables)
             self._code_generator = Agent( #type: ignore
@@ -96,7 +93,6 @@ class AIService:
         except Exception as e:
             self.logger.error(f"Failed to initialize AI agents: {e}")
             self.logger.error(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
-            self.logger.error(f"Model config: {model_config}")
             self.logger.error(f"Model name: {model_name}")
             import traceback
             self.logger.error(f"Full traceback: {traceback.format_exc()}")

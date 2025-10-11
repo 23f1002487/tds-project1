@@ -144,6 +144,26 @@ async def debug_config():
     }
 
 
+@app.get("/restart-ai")
+async def restart_ai():
+    """Force restart of AI service (for debugging)"""
+    try:
+        task_processor.ai_service._code_generator = None
+        task_processor.ai_service._code_reviser = None
+        task_processor.ai_service._try_initialize_agents()
+        
+        return {
+            "message": "AI service restarted",
+            "ai_available": task_processor.ai_service._can_use_ai(),
+            "agents_initialized": task_processor.ai_service._code_generator is not None
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "ai_available": False
+        }
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
