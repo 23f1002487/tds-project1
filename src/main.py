@@ -13,9 +13,9 @@
 
 import logging
 from fastapi import FastAPI, HTTPException #type: ignore
-from Student.src.Models.models import TaskRequest, TaskResponse
-from Student.src.services.task_service import TaskProcessor
-from Student.src.Config.config import config
+from Models.models import TaskRequest, TaskResponse
+from services.task_service import TaskProcessor
+from Config.config import config
 
 # Configure logging
 logging.basicConfig(
