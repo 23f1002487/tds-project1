@@ -38,46 +38,43 @@ class AIService:
     
     def _initialize_agents(self):
         """Initialize Pydantic AI agents"""
-        model_name = "gpt-4o-mini"  # Default fallback
+        model_name = "gpt-4o-mini"  # Default model
         
         try:
-            # Ensure environment variables are set for pydantic-ai
+            # Hardcode AIPIPE configuration instead of using environment variables
             import os
             
-            # Get AIPIPE_TOKEN and URL (prioritize AIPIPE)
-            api_token = config.get_ai_key
-            base_url = config.get_ai_url
-            
-            if not api_token:
-                self.logger.warning("No AIPIPE_TOKEN available")
+            # Check if we have AIPIPE_TOKEN from config
+            if config.aipipe_token and config.aipipe_token.strip():
+                # Hardcoded AIPIPE configuration
+                aipipe_token = config.aipipe_token
+                aipipe_base_url = "https://aipipe.org/openai/v1"
+                
+                # Set environment variables for pydantic-ai
+                os.environ["OPENAI_API_KEY"] = aipipe_token
+                os.environ["OPENAI_BASE_URL"] = aipipe_base_url
+                
+                self.logger.info(f"Using hardcoded AIPIPE configuration:")
+                self.logger.info(f"  - Token length: {len(aipipe_token)}")
+                self.logger.info(f"  - Base URL: {aipipe_base_url}")
+                self.logger.info(f"  - Model: {model_name}")
+                
+            elif config.openai_api_key and config.openai_api_key.strip():
+                # Use OpenAI directly
+                os.environ["OPENAI_API_KEY"] = config.openai_api_key
+                # Don't set base URL for OpenAI (use default)
+                if "OPENAI_BASE_URL" in os.environ:
+                    del os.environ["OPENAI_BASE_URL"]
+                
+                self.logger.info(f"Using OpenAI configuration:")
+                self.logger.info(f"  - Token length: {len(config.openai_api_key)}")
+                self.logger.info(f"  - Model: {model_name}")
+                
+            else:
+                self.logger.warning("No API token available (neither AIPIPE_TOKEN nor OPENAI_API_KEY)")
                 return
             
-            # Always set OPENAI_API_KEY for pydantic-ai compatibility
-            os.environ["OPENAI_API_KEY"] = api_token
-            self.logger.info(f"Set OPENAI_API_KEY environment variable (length: {len(api_token)})")
-            
-            # Set base URL if using AIPIPE
-            if base_url and base_url != "https://api.openai.com/v1":
-                os.environ["OPENAI_BASE_URL"] = base_url
-                self.logger.info(f"Set OPENAI_BASE_URL environment variable: {base_url}")
-            
-            self.logger.info(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
-            self.logger.info(f"Using API URL: {base_url}")
-            
-            # Determine model name based on service type - use working models from testing
-            working_models = ['gpt-4o-mini', 'gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']
-            
-            if config.aipipe_token and config.aipipe_token.strip():
-                self.logger.info("Using AIPIPE service with standard model names (no openai/ prefix)")
-                # Use the first working model
-                model_name = working_models[0]  # gpt-4o-mini
-                self.logger.info(f"Using AIPIPE service with model: {model_name}")
-            else:
-                # Using OpenAI directly
-                model_name = working_models[0]  # gpt-4o-mini
-                self.logger.info(f"Using OpenAI service with model: {model_name}")
-            
-            # Create agents without passing API key parameters (they use environment variables)
+            # Create agents without passing any parameters (they use environment variables)
             self._code_generator = Agent( #type: ignore
                 model_name,
                 result_type=GeneratedCode,
@@ -89,7 +86,8 @@ class AIService:
                 result_type=GeneratedCode,
                 system_prompt=self._get_revision_prompt()
             )
-            self.logger.info("Pydantic AI agents initialized successfully")
+            self.logger.info("Pydantic AI agents initialized successfully with hardcoded config")
+            
         except Exception as e:
             self.logger.error(f"Failed to initialize AI agents: {e}")
             self.logger.error(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")

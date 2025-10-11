@@ -106,9 +106,9 @@ async def debug_config():
         
         if config.aipipe_token and config.aipipe_token.strip():
             import os
+            # Hardcode AIPIPE configuration
             os.environ["OPENAI_API_KEY"] = config.aipipe_token
-            if config.aipipe_url:
-                os.environ["OPENAI_BASE_URL"] = config.aipipe_url
+            os.environ["OPENAI_BASE_URL"] = "https://aipipe.org/openai/v1"
                 
             for model in test_models:
                 try:
