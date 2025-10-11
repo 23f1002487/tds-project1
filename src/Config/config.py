@@ -30,7 +30,7 @@ class Config:
             # Legacy OpenAI support
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             openai_url=os.getenv("OPENAI_URL", "https://api.openai.com/v1"),
-            log_file=os.getenv("LOG_FILE", "task_log.txt"),
+            log_file=os.getenv("LOG_FILE", "/tmp/task_log.txt"),
             log_level=os.getenv("LOG_LEVEL", "INFO")
         )
     

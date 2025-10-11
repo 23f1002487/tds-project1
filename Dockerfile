@@ -23,8 +23,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create logs directory
-RUN mkdir -p logs
+# Create logs directory with proper permissions
+RUN mkdir -p /app/logs /tmp/logs && \
+    chmod 777 /app/logs /tmp/logs && \
+    touch /app/logs/task_log.txt && \
+    chmod 666 /app/logs/task_log.txt || true
+
+# Set environment variable for log directory
+ENV LOG_FILE=/app/logs/task_log.txt
 
 # Expose port for Hugging Face Spaces
 EXPOSE 7860

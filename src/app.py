@@ -18,11 +18,39 @@ from .services.task_service import TaskProcessor
 from .Config.config import config
 
 # Configure logging
-logging.basicConfig(
-    filename=config.log_file,
-    level=getattr(logging, config.log_level),
-    format="%(asctime)s - %(levelname)s - %(module)s - %(message)s"
-)
+import os
+try:
+    # Try to create logs directory if it doesn't exist
+    log_dir = os.path.dirname(config.log_file) or "/tmp"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Try to use the configured log file, fall back to console if permission denied
+    log_file = config.log_file if os.access(os.path.dirname(config.log_file) or ".", os.W_OK) else None
+    
+    logging.basicConfig(
+        filename=log_file,
+        level=getattr(logging, config.log_level),
+        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+        force=True
+    )
+    
+    # If we couldn't write to file, also log to console
+    if log_file is None:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(getattr(logging, config.log_level))
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(module)s - %(message)s")
+        console_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(console_handler)
+        logging.warning("Could not write to log file, using console logging")
+        
+except Exception as e:
+    # Fall back to console logging if anything goes wrong
+    logging.basicConfig(
+        level=getattr(logging, config.log_level, logging.INFO),
+        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+        force=True
+    )
+    logging.warning(f"Logging setup failed, using console: {e}")
 
 app = FastAPI(title="Student Task Processor", version="1.0.0")
 task_processor = TaskProcessor()
