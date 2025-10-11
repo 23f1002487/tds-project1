@@ -43,7 +43,7 @@
 ### 7. Updated Files
 - `src/Config/config.py`
 - `src/services/ai_service.py`
-- `src/main.py` (health check references)
+- `src/app.py` (health check references)
 - `README.md` (documentation)
 - `test_config.py` (testing)
 - `src/tests/test_pydantic_ai.py` (testing)
