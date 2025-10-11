@@ -5,7 +5,7 @@ import logging
 import asyncio
 import requests
 from typing import List, Dict
-from ..Models.models import TaskRequest, TaskResponse, CodeFile
+from ..Models.models import TaskRequest, TaskResponse, CodeFile, GeneratedCode
 from .ai_service import AIService
 from .github_service import GitHubService
 from ..Config.config import config

@@ -33,15 +33,6 @@ try:
         format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
         force=True
     )
-    
-    # If we couldn't write to file, also log to console
-    if log_file is None:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(getattr(logging, config.log_level))
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(module)s - %(message)s")
-        console_handler.setFormatter(formatter)
-        logging.getLogger().addHandler(console_handler)
-        logging.warning("Could not write to log file, using console logging")
         
 except Exception as e:
     # Fall back to console logging if anything goes wrong
@@ -80,88 +71,6 @@ async def health_check():
         "github_configured": bool(config.github_token != "..."),
         "config_loaded": True
     }
-
-
-@app.get("/debug")
-async def debug_config():
-    """Debug endpoint to check configuration (remove in production)"""
-    try:
-        from pydantic_ai import Agent
-        pydantic_ai_import_ok = True
-        agent_test_error = None
-        
-        # Test different models to find one that works
-        test_models = [
-            'gpt-4o-mini',
-            'gpt-3.5-turbo', 
-            'gpt-4',
-            'gpt-4-turbo',
-            'openai/gpt-4o-mini',
-            'openai/gpt-3.5-turbo',
-            'openai/gpt-4'
-        ]
-        
-        working_models = []
-        model_errors = {}
-        
-        if config.aipipe_token and config.aipipe_token.strip():
-            import os
-            # Hardcode AIPIPE configuration
-            os.environ["OPENAI_API_KEY"] = config.aipipe_token
-            os.environ["OPENAI_BASE_URL"] = "https://aipipe.org/openai/v1"
-                
-            for model in test_models:
-                try:
-                    test_agent = Agent(model)
-                    working_models.append(model)
-                except Exception as e:
-                    model_errors[model] = str(e)
-        
-        agent_creation_ok = len(working_models) > 0
-            
-    except ImportError as e:
-        pydantic_ai_import_ok = False
-        agent_creation_ok = False
-        agent_test_error = f"Import error: {str(e)}"
-        working_models = []
-        model_errors = {}
-    
-    return {
-        "pydantic_ai_import": pydantic_ai_import_ok,
-        "agent_creation": agent_creation_ok,
-        "agent_error": agent_test_error,
-        "working_models": working_models,
-        "model_errors": model_errors,
-        "pydantic_ai_available": hasattr(task_processor.ai_service, '_code_generator') and task_processor.ai_service._code_generator is not None,
-        "has_aipipe_token": bool(config.aipipe_token and config.aipipe_token.strip() and config.aipipe_token != "..."),
-        "has_openai_key": bool(config.openai_api_key and config.openai_api_key.strip() and config.openai_api_key != "..."),
-        "has_ai_key": config.has_ai_key,
-        "ai_key_length": len(config.get_ai_key or "") if config.get_ai_key else 0,
-        "aipipe_url": config.aipipe_url,
-        "openai_url": config.openai_url,
-        "secret_configured": bool(config.secret_key != "..."),
-        "github_configured": bool(config.github_token != "...")
-    }
-
-
-@app.get("/restart-ai")
-async def restart_ai():
-    """Force restart of AI service (for debugging)"""
-    try:
-        task_processor.ai_service._code_generator = None
-        task_processor.ai_service._code_reviser = None
-        task_processor.ai_service._try_initialize_agents()
-        
-        return {
-            "message": "AI service restarted",
-            "ai_available": task_processor.ai_service._can_use_ai(),
-            "agents_initialized": task_processor.ai_service._code_generator is not None
-        }
-    except Exception as e:
-        return {
-            "error": str(e),
-            "ai_available": False
-        }
 
 
 @app.get("/")

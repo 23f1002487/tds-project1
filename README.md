@@ -40,10 +40,10 @@ This intelligent system receives task briefs and automatically:
 
 Set these in your Hugging Face Spaces settings:
 
-- **`AIPIPE_TOKEN`** - Your AIPIPE API token (required)
+- **`OPENAI_API_KEY`** - Your AIPIPE token (use AIPIPE token here for compatibility) (required)
+- **`OPENAI_BASE_URL`** - AIPIPE service URL: `https://aipipe.org/openrouter/v1` (required)
 - **`github_token`** - GitHub Personal Access Token with repo permissions (required)
 - **`secret`** - Authentication secret for API access (required)
-- **`AIPIPE_URL`** - AIPIPE service URL (optional, defaults to openrouter)
 
 ## 🎓 Usage Example
 

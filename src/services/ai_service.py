@@ -7,7 +7,7 @@ from ..Models.models import GeneratedCode, CodeFile, Attachment
 from ..Config.config import config
 
 try:
-    from pydantic_ai import Agent # type: ignore
+    from pydantic_ai import Agent
     PYDANTIC_AI_AVAILABLE = True
 except ImportError:
     PYDANTIC_AI_AVAILABLE = False
@@ -27,78 +27,59 @@ class AIService:
     
     def _try_initialize_agents(self):
         """Try to initialize agents, with retry capability"""
-        if PYDANTIC_AI_AVAILABLE and config.has_ai_key:
+        if PYDANTIC_AI_AVAILABLE:
             self._initialize_agents()
     
     def ensure_agents_initialized(self):
         """Ensure agents are initialized - call this when you need AI functionality"""
-        if self._code_generator is None and PYDANTIC_AI_AVAILABLE and config.has_ai_key:
+        if self._code_generator is None and PYDANTIC_AI_AVAILABLE:
             self.logger.info("Attempting to initialize AI agents on demand")
             self._initialize_agents()
     
     def _initialize_agents(self):
         """Initialize Pydantic AI agents"""
-        model_name = "gpt-4o-mini"  # Default model
+        model_name = "gpt-4.1-nano"  # Default model
         
-        try:
-            # Hardcode AIPIPE configuration instead of using environment variables
-            import os
-            
+        try:            
             # Check if we have AIPIPE_TOKEN from config
-            if config.aipipe_token and config.aipipe_token.strip():
-                # Hardcoded AIPIPE configuration
-                aipipe_token = config.aipipe_token
-                aipipe_base_url = "https://aipipe.org/openai/v1"
+            if config.openai_token and config.openai_token.strip():
+                openai_token = config.openai_token
+                aipipe_base_url = config.aipipe_url or "https://aipipe.org/openrouter/v1"
                 
-                # Set environment variables for pydantic-ai
-                os.environ["OPENAI_API_KEY"] = aipipe_token
-                os.environ["OPENAI_BASE_URL"] = aipipe_base_url
-                
-                self.logger.info(f"Using hardcoded AIPIPE configuration:")
-                self.logger.info(f"  - Token length: {len(aipipe_token)}")
                 self.logger.info(f"  - Base URL: {aipipe_base_url}")
                 self.logger.info(f"  - Model: {model_name}")
-                
-            elif config.openai_api_key and config.openai_api_key.strip():
-                # Use OpenAI directly
-                os.environ["OPENAI_API_KEY"] = config.openai_api_key
-                # Don't set base URL for OpenAI (use default)
-                if "OPENAI_BASE_URL" in os.environ:
-                    del os.environ["OPENAI_BASE_URL"]
-                
-                self.logger.info(f"Using OpenAI configuration:")
-                self.logger.info(f"  - Token length: {len(config.openai_api_key)}")
-                self.logger.info(f"  - Model: {model_name}")
-                
+                print(f"After logging AIPIPE configuration {aipipe_base_url} and {model_name}")
+                              
             else:
-                self.logger.warning("No API token available (neither AIPIPE_TOKEN nor OPENAI_API_KEY)")
+                self.logger.warning("No API token available, cannot initialize AI agents")
                 return
             
             # Create agents without passing any parameters (they use environment variables)
-            self._code_generator = Agent( #type: ignore
+            self._code_generator = Agent(
                 model_name,
-                result_type=GeneratedCode,
                 system_prompt=self._get_generation_prompt()
             )
             
-            self._code_reviser = Agent( #type: ignore
+            self._code_reviser = Agent(
                 model_name,
-                result_type=GeneratedCode,
                 system_prompt=self._get_revision_prompt()
             )
-            self.logger.info("Pydantic AI agents initialized successfully with hardcoded config")
+            self.logger.info("Pydantic AI agents initialized successfully")
+            print("Pydantic AI agents initialized successfully")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize AI agents: {e}")
-            self.logger.error(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
+            self.logger.error(f"AIPIPE_TOKEN present: {bool(config.openai_token)}")
             self.logger.error(f"Model name: {model_name}")
             import traceback
             self.logger.error(f"Full traceback: {traceback.format_exc()}")
+            print(f"Failed to initialize AI agents: {e}")
             self._code_generator = None
             self._code_reviser = None
     
     def _get_generation_prompt(self) -> str:
         """Get system prompt for code generation"""
+        print("Getting generation prompt")
         return """You are an expert full-stack web developer. Generate complete, functional web applications based on task briefs.
 
 CRITICAL REQUIREMENTS:
@@ -156,10 +137,10 @@ Ensure all files work together cohesively and address the feedback provided."""
         """Check if AI generation is available"""
         # Try to initialize if not already done
         if self._code_generator is None:
+            print("Attempting to initialize AI agents... code_generator is None")
             self.ensure_agents_initialized()
             
-        return (PYDANTIC_AI_AVAILABLE and 
-                config.has_ai_key and 
+        return (PYDANTIC_AI_AVAILABLE and
                 self._code_generator is not None)
     
     def _generate_with_ai(self, task_brief: str, round_num: int, existing_files: Optional[Dict]) -> Dict[str, str]:
@@ -192,7 +173,6 @@ Please revise the application based on feedback and improve it significantly. Ad
     
     def _generate_with_template(self, task_brief: str) -> Dict[str, str]:
         """Generate code using adaptive templates"""
-        from templates import TemplateGenerator #type: ignore
         generator = TemplateGenerator()
         return generator.generate_adaptive_template(task_brief)
 
