@@ -22,10 +22,18 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables"""
+        # Get AIPIPE_TOKEN
+        aipipe_token = os.getenv("AIPIPE_TOKEN")
+        
+        # If we have AIPIPE_TOKEN but no OPENAI_API_KEY, set OPENAI_API_KEY to AIPIPE_TOKEN
+        # This allows pydantic-ai to work with AIPIPE
+        if aipipe_token and not os.getenv("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = aipipe_token
+        
         return cls(
             secret_key=os.getenv("secret", "..."),
             github_token=os.getenv("github_token", "..."),
-            aipipe_token=os.getenv("AIPIPE_TOKEN"),
+            aipipe_token=aipipe_token,
             aipipe_url=os.getenv("AIPIPE_URL", "https://aipipe.org/openrouter/v1"),
             # Legacy OpenAI support
             openai_api_key=os.getenv("OPENAI_API_KEY"),

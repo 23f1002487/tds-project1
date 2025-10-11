@@ -31,13 +31,16 @@ class AIService:
         model_name = "unknown"
         
         try:
-            # Get API token and URL (prioritize AIPIPE)
+            # Get AIPIPE_TOKEN and URL (prioritize AIPIPE)
             api_token = config.get_ai_key
             base_url = config.get_ai_url
             
             if not api_token:
                 self.logger.warning("No AIPIPE_TOKEN available")
                 return
+            
+            self.logger.info(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
+            self.logger.info(f"Using API URL: {base_url}")
             
             # Determine model name based on service type
             if config.aipipe_token and config.aipipe_token.strip():
@@ -48,6 +51,12 @@ class AIService:
                 # Using OpenAI directly
                 model_name = 'gpt-4o-mini'
                 self.logger.info(f"Using OpenAI service with model: {model_name}")
+            
+            # For AIPIPE, we need to ensure the environment variable is set
+            if config.aipipe_token:
+                import os
+                os.environ["OPENAI_API_KEY"] = config.aipipe_token
+                self.logger.info("Set OPENAI_API_KEY environment variable for pydantic-ai compatibility")
             
             # Configure the model with appropriate settings
             if base_url and base_url != "https://api.openai.com/v1":
