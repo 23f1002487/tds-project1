@@ -34,7 +34,7 @@ class Config:
             secret_key=os.getenv("secret", "..."),
             github_token=os.getenv("github_token", "..."),
             aipipe_token=aipipe_token,
-            aipipe_url=os.getenv("AIPIPE_URL", "https://aipipe.org/openrouter/v1"),
+            aipipe_url=os.getenv("AIPIPE_URL", "https://aipipe.org/openai/v1"),
             # Legacy OpenAI support
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             openai_url=os.getenv("OPENAI_URL", "https://api.openai.com/v1"),

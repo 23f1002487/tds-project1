@@ -22,7 +22,18 @@ class AIService:
         self._code_generator = None
         self._code_reviser = None
         
+        # Try to initialize agents
+        self._try_initialize_agents()
+    
+    def _try_initialize_agents(self):
+        """Try to initialize agents, with retry capability"""
         if PYDANTIC_AI_AVAILABLE and config.has_ai_key:
+            self._initialize_agents()
+    
+    def ensure_agents_initialized(self):
+        """Ensure agents are initialized - call this when you need AI functionality"""
+        if self._code_generator is None and PYDANTIC_AI_AVAILABLE and config.has_ai_key:
+            self.logger.info("Attempting to initialize AI agents on demand")
             self._initialize_agents()
     
     def _initialize_agents(self):
@@ -44,12 +55,12 @@ class AIService:
             
             # Determine model name based on service type
             if config.aipipe_token and config.aipipe_token.strip():
-                # Using AIPIPE service - use direct model name
-                model_name = 'gpt-4o-mini'  # Use a simpler, more reliable model
+                # Using AIPIPE service - use correct prefixed model name
+                model_name = 'openai/gpt-4.1-nano'  # Correct AIPIPE format with openai/ prefix
                 self.logger.info(f"Using AIPIPE service with model: {model_name}")
             else:
                 # Using OpenAI directly
-                model_name = 'gpt-4o-mini'
+                model_name = 'gpt-4.1-nano'  # Direct OpenAI format
                 self.logger.info(f"Using OpenAI service with model: {model_name}")
             
             # For AIPIPE, we need to ensure the environment variable is set
@@ -144,6 +155,10 @@ Ensure all files work together cohesively and address the feedback provided."""
     
     def _can_use_ai(self) -> bool:
         """Check if AI generation is available"""
+        # Try to initialize if not already done
+        if self._code_generator is None:
+            self.ensure_agents_initialized()
+            
         return (PYDANTIC_AI_AVAILABLE and 
                 config.has_ai_key and 
                 self._code_generator is not None)

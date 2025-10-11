@@ -98,10 +98,10 @@ async def debug_config():
                 os.environ["OPENAI_API_KEY"] = config.aipipe_token
                 if config.aipipe_url:
                     os.environ["OPENAI_BASE_URL"] = config.aipipe_url
-                test_agent = Agent('gpt-4o-mini')
+                test_agent = Agent('openai/gpt-4.1-nano')  # Correct AIPIPE model format
             else:
                 # Test OpenAI configuration
-                test_agent = Agent('gpt-4o-mini')
+                test_agent = Agent('gpt-4.1-nano')  # Direct OpenAI format
             agent_creation_ok = True
         except Exception as e:
             agent_creation_ok = False
