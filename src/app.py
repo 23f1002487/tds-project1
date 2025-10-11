@@ -90,32 +90,48 @@ async def debug_config():
         pydantic_ai_import_ok = True
         agent_test_error = None
         
-        # Try to create a simple agent
-        try:
-            if config.aipipe_token and config.aipipe_token.strip():
-                # Test AIPIPE configuration - use environment variables only
-                import os
-                os.environ["OPENAI_API_KEY"] = config.aipipe_token
-                if config.aipipe_url:
-                    os.environ["OPENAI_BASE_URL"] = config.aipipe_url
-                test_agent = Agent('openai/gpt-4.1-nano')  # Correct AIPIPE model format
-            else:
-                # Test OpenAI configuration
-                test_agent = Agent('gpt-4.1-nano')  # Direct OpenAI format
-            agent_creation_ok = True
-        except Exception as e:
-            agent_creation_ok = False
-            agent_test_error = str(e)
+        # Test different models to find one that works
+        test_models = [
+            'gpt-4o-mini',
+            'gpt-3.5-turbo', 
+            'gpt-4',
+            'gpt-4-turbo',
+            'openai/gpt-4o-mini',
+            'openai/gpt-3.5-turbo',
+            'openai/gpt-4'
+        ]
+        
+        working_models = []
+        model_errors = {}
+        
+        if config.aipipe_token and config.aipipe_token.strip():
+            import os
+            os.environ["OPENAI_API_KEY"] = config.aipipe_token
+            if config.aipipe_url:
+                os.environ["OPENAI_BASE_URL"] = config.aipipe_url
+                
+            for model in test_models:
+                try:
+                    test_agent = Agent(model)
+                    working_models.append(model)
+                except Exception as e:
+                    model_errors[model] = str(e)
+        
+        agent_creation_ok = len(working_models) > 0
             
     except ImportError as e:
         pydantic_ai_import_ok = False
         agent_creation_ok = False
         agent_test_error = f"Import error: {str(e)}"
+        working_models = []
+        model_errors = {}
     
     return {
         "pydantic_ai_import": pydantic_ai_import_ok,
         "agent_creation": agent_creation_ok,
         "agent_error": agent_test_error,
+        "working_models": working_models,
+        "model_errors": model_errors,
         "pydantic_ai_available": hasattr(task_processor.ai_service, '_code_generator') and task_processor.ai_service._code_generator is not None,
         "has_aipipe_token": bool(config.aipipe_token and config.aipipe_token.strip() and config.aipipe_token != "..."),
         "has_openai_key": bool(config.openai_api_key and config.openai_api_key.strip() and config.openai_api_key != "..."),

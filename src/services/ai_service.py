@@ -53,14 +53,38 @@ class AIService:
             self.logger.info(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
             self.logger.info(f"Using API URL: {base_url}")
             
-            # Determine model name based on service type
+            # Determine model name based on service type - try multiple models
+            available_models = [
+                'gpt-4o-mini',
+                'gpt-3.5-turbo', 
+                'gpt-4',
+                'openai/gpt-4o-mini',
+                'openai/gpt-3.5-turbo'
+            ]
+            
+            model_name = None
+            
             if config.aipipe_token and config.aipipe_token.strip():
-                # Using AIPIPE service - use correct prefixed model name
-                model_name = 'openai/gpt-4.1-nano'  # Correct AIPIPE format with openai/ prefix
-                self.logger.info(f"Using AIPIPE service with model: {model_name}")
+                self.logger.info("Using AIPIPE service, testing available models...")
+                # Test which models work with AIPIPE
+                for test_model in available_models:
+                    try:
+                        # Quick test to see if model is available
+                        test_agent = Agent(test_model) #type: ignore
+                        model_name = test_model
+                        self.logger.info(f"Successfully found working model: {model_name}")
+                        break
+                    except Exception as e:
+                        self.logger.debug(f"Model {test_model} failed: {e}")
+                        continue
+                        
+                if not model_name:
+                    # Fallback to default
+                    model_name = 'gpt-4o-mini'
+                    self.logger.warning(f"No working model found, using fallback: {model_name}")
             else:
                 # Using OpenAI directly
-                model_name = 'gpt-4.1-nano'  # Direct OpenAI format
+                model_name = 'gpt-4o-mini'
                 self.logger.info(f"Using OpenAI service with model: {model_name}")
             
             # For AIPIPE, we need to ensure the environment variable is set
