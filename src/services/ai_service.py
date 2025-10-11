@@ -41,12 +41,12 @@ class AIService:
             
             # Determine model name based on service type
             if config.aipipe_token and config.aipipe_token.strip():
-                # Using AIPIPE service - use prefixed model name
-                model_name = 'openai/gpt-4.1-nano'
+                # Using AIPIPE service - use direct model name
+                model_name = 'gpt-4o-mini'  # Use a simpler, more reliable model
                 self.logger.info(f"Using AIPIPE service with model: {model_name}")
             else:
                 # Using OpenAI directly
-                model_name = 'openai:gpt-4.1-nano'
+                model_name = 'gpt-4o-mini'
                 self.logger.info(f"Using OpenAI service with model: {model_name}")
             
             # Configure the model with appropriate settings
