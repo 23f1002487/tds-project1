@@ -27,6 +27,9 @@ class AIService:
     
     def _initialize_agents(self):
         """Initialize Pydantic AI agents"""
+        model_config = {}
+        model_name = "unknown"
+        
         try:
             # Get API token and URL (prioritize AIPIPE)
             api_token = config.get_ai_key
@@ -75,6 +78,11 @@ class AIService:
             self.logger.info("Pydantic AI agents initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize AI agents: {e}")
+            self.logger.error(f"AIPIPE_TOKEN present: {bool(config.aipipe_token)}")
+            self.logger.error(f"Model config: {model_config}")
+            self.logger.error(f"Model name: {model_name}")
+            import traceback
+            self.logger.error(f"Full traceback: {traceback.format_exc()}")
             self._code_generator = None
             self._code_reviser = None
     
