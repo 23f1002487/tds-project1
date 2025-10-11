@@ -28,12 +28,12 @@ class AIService:
     def _initialize_agents(self):
         """Initialize Pydantic AI agents"""
         try:
-            # Get API key and URL (prioritize AIPIPE)
-            api_key = config.get_ai_key
+            # Get API token and URL (prioritize AIPIPE)
+            api_token = config.get_ai_key
             base_url = config.get_ai_url
             
-            if not api_key:
-                self.logger.warning("No AI API key available")
+            if not api_token:
+                self.logger.warning("No AIPIPE_TOKEN available")
                 return
             
             # Determine model name based on service type
@@ -50,12 +50,12 @@ class AIService:
             if base_url and base_url != "https://api.openai.com/v1":
                 model_config = {
                     'openai_base_url': base_url,
-                    'openai_api_key': api_key
+                    'openai_api_key': api_token
                 }
                 self.logger.info(f"Using custom AI URL: {base_url}")
             else:
                 model_config = {
-                    'openai_api_key': api_key
+                    'openai_api_key': api_token
                 }
                 self.logger.info("Using default OpenAI URL")
             

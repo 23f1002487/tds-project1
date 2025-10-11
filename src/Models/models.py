@@ -13,7 +13,7 @@ class Attachment(BaseModel):
 
 class TaskRequest(BaseModel):
     """Incoming task request model"""
-    email: str = Field(..., pattern=r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    email: str = Field(..., pattern=r'^23f\d{7}@ds\.study\.iitm\.ac\.in$')
     secret: str = Field(..., min_length=8)
     task: str = Field(..., min_length=1)
     round: int = Field(..., ge=1)
@@ -26,7 +26,7 @@ class TaskRequest(BaseModel):
 
 class TaskResponse(BaseModel):
     """Task completion response model"""
-    email: str = Field(..., pattern=r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    email: str = Field(..., pattern=r'^23f\d{7}@ds\.study\.iitm\.ac\.in$')
     task: str = Field(..., min_length=1)
     round: int = Field(..., ge=1)
     nonce: str = Field(..., min_length=1)
