@@ -70,25 +70,29 @@ task_processor = TaskProcessor()
 
 
 @app.post("/process_task")
-async def process_task(task_request: TaskRequest) -> TaskResponse:
+async def process_task(task_request: TaskRequest) -> dict:
     """
-    Process a student task request through the complete workflow.
+    Process a student task request with immediate response and background processing.
     
-    This endpoint handles:
-    1. Authentication and validation
-    2. AI-powered code generation
-    3. GitHub repository creation
-    4. File upload and GitHub Pages deployment
-    5. Evaluation URL submission
+    This endpoint provides immediate response while processing the task in the background:
+    1. Authentication and validation (immediate)
+    2. Immediate 200 response with processing status
+    3. Background AI-powered code generation
+    4. Background GitHub repository creation and deployment
+    5. Background evaluation URL submission with complete results
     
     Args:
         task_request: TaskRequest containing task details, authentication, and requirements
         
     Returns:
-        TaskResponse with repository URL, commit SHA, and GitHub Pages URL
+        dict: Immediate response with processing status, tracking ID, and estimated completion time
         
     Raises:
         HTTPException: 403 for authentication errors, 500 for processing errors
+        
+    Note:
+        The actual task processing happens in the background. Complete results
+        will be submitted to the provided evaluation_url when processing finishes.
     """
     try:
         return await task_processor.process_task(task_request)
