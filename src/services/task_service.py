@@ -1,5 +1,15 @@
 """
-Task processing service - coordinates all operations
+Task processing service - coordinates all operations.
+
+This service orchestrates the complete task processing workflow:
+1. Authentication and validation
+2. AI-powered code generation
+3. GitHub repository creation and file upload
+4. GitHub Pages deployment
+5. Evaluation URL submission
+
+Supports both initial task processing (Round 1) and revision workflows (Round 2+).
+Includes comprehensive error handling, retry logic, and logging throughout the process.
 """
 import logging
 import asyncio
@@ -12,7 +22,13 @@ from ..Config.config import config
 
 
 class TaskProcessor:
-    """Main service for processing tasks"""
+    """
+    Main service for processing tasks through the complete workflow.
+    
+    Coordinates AI services, GitHub operations, and evaluation submissions
+    to provide a complete task processing pipeline. Handles both initial
+    task generation and revision workflows with proper error handling.
+    """
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -20,13 +36,32 @@ class TaskProcessor:
         self.github_service = GitHubService()
     
     def validate_credentials(self, secret: str) -> None:
-        """Validate the provided secret key"""
+        """
+        Validate the provided secret key against configuration.
+        
+        Args:
+            secret: Secret key from request
+            
+        Raises:
+            ValueError: If secret key is invalid
+        """
         if secret != config.secret_key:
             self.logger.warning("Invalid secret key provided by user")
             raise ValueError("Forbidden: Invalid secret key")
     
     async def process_task(self, task_request: TaskRequest) -> TaskResponse:
-        """Process a complete task from request to response"""
+        """
+        Process a complete task from request to response.
+        
+        Args:
+            task_request: Validated task request with all required fields
+            
+        Returns:
+            TaskResponse: Complete response with repository and deployment URLs
+            
+        Raises:
+            Exception: For any processing errors
+        """
         self.logger.info(f"Processing task: {task_request.task} (Round {task_request.round})")
         
         # Validate credentials
@@ -44,9 +79,12 @@ class TaskProcessor:
     async def _process_initial_task(self, task_request: TaskRequest) -> TaskResponse:
         """Process initial task (round 1)"""
         # Generate code using AI
-        generated_files = self.ai_service.generate_code(
+        generated_files = await self.ai_service.generate_code(
             task_request.brief,
-            round_num=1
+            round_num=1,
+            checks=task_request.checks,
+            attachments=[attachment.dict() for attachment in task_request.attachments],
+            email=task_request.email
         )
         
         # Convert to CodeFile objects
@@ -85,10 +123,13 @@ class TaskProcessor:
         existing_files = {}  # Would fetch from previous round
         
         # Generate revised code
-        generated_files = self.ai_service.generate_code(
+        generated_files = await self.ai_service.generate_code(
             task_request.brief,
             round_num=task_request.round,
-            existing_files=existing_files
+            existing_files=existing_files,
+            checks=task_request.checks,
+            attachments=[attachment.dict() for attachment in task_request.attachments],
+            email=task_request.email
         )
         
         # Convert to CodeFile objects

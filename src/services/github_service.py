@@ -1,5 +1,15 @@
 """
-GitHub service for repository operations
+GitHub service for repository operations.
+
+This service handles all GitHub-related operations including:
+- Repository creation with proper configuration
+- File upload with base64 encoding
+- GitHub Pages deployment and configuration
+- Error handling and retry logic
+
+Requires a valid GitHub personal access token with appropriate permissions:
+- repo (for repository creation and file operations)
+- pages (for GitHub Pages deployment)
 """
 import logging
 import requests
@@ -10,7 +20,13 @@ from ..Config.config import config
 
 
 class GitHubService:
-    """Service for GitHub repository operations"""
+    """
+    Service for GitHub repository operations.
+    
+    Handles repository creation, file uploads, and GitHub Pages deployment
+    using the GitHub REST API. Includes comprehensive error handling and
+    logging for all operations.
+    """
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -21,7 +37,18 @@ class GitHubService:
         }
     
     def create_repository(self, repo_name: str) -> str:
-        """Create a GitHub repository and return the repository URL"""
+        """
+        Create a GitHub repository and return the repository URL.
+        
+        Args:
+            repo_name: Name for the new repository
+            
+        Returns:
+            str: HTML URL of the created repository
+            
+        Raises:
+            Exception: If repository creation fails
+        """
         self.logger.info(f"Creating GitHub repository: {repo_name}")
         
         payload = {

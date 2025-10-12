@@ -1,5 +1,16 @@
 """
-Configuration management for the student application
+Configuration management for the student application.
+
+This module handles loading and managing configuration from environment variables.
+It provides secure defaults and validation for required configuration parameters.
+
+Environment variables:
+- secret: Authentication secret key (required)
+- github_token: GitHub personal access token (required)
+- OPENAI_API_KEY: OpenAI/AIPIPE API key for AI services (optional)
+- OPENAI_BASE_URL: Custom API base URL (optional, defaults to AIPIPE)
+
+The configuration supports both local development and production deployment.
 """
 import os
 from dataclasses import dataclass
@@ -8,7 +19,17 @@ from typing import Optional
 
 @dataclass
 class Config:
-    """Application configuration"""
+    """
+    Application configuration loaded from environment variables.
+    
+    Attributes:
+        secret_key: Authentication secret key for API access
+        github_token: GitHub personal access token for repository operations
+        openai_token: OpenAI API key for AI services (optional)
+        aipipe_url: Custom API base URL (optional)
+        log_file: Path to log file (default: task_log.txt)
+        log_level: Logging level (default: INFO)
+    """
     secret_key: str
     github_token: str
     openai_token: Optional[str] = None
@@ -18,7 +39,16 @@ class Config:
     
     @classmethod
     def from_env(cls) -> "Config":
-        """Create configuration from environment variables"""
+        """
+        Create configuration from environment variables.
+        
+        Returns:
+            Config: Configured instance with values from environment
+            
+        Note:
+            Uses secure defaults ("...") for missing required variables
+            to prevent application crashes during development.
+        """
         
         return cls(
             secret_key=os.getenv("secret", "..."),

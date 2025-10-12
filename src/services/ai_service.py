@@ -1,5 +1,19 @@
 """
-AI service for code generation using Pydantic AI
+AI service for code generation using Pydantic AI.
+
+This service provides AI-powered code generation capabilities for web applications.
+It handles both initial code generation (Round 1) and code revision (Round 2+).
+
+Key features:
+- Integration with pydantic-ai for structured code generation
+- Support for multiple AI models via AIPIPE/OpenRouter
+- Proper JSON parsing and validation
+- Seed placeholder processing for evaluation framework compatibility
+- Comprehensive error handling and fallback mechanisms
+
+Environment variables required:
+- OPENAI_API_KEY: API key for AI service
+- OPENAI_BASE_URL: Base URL for AI service (optional, defaults to AIPIPE)
 """
 import logging
 from typing import Dict, Optional, List
@@ -90,6 +104,27 @@ CRITICAL REQUIREMENTS:
 - Make the UI responsive and user-friendly
 - Ensure all functionality described in the task is implemented and working
 - Do NOT make assumptions about what the task is - build exactly what is requested
+- Pay special attention to the validation checks - every check must be satisfied in your implementation
+
+SPECIAL HANDLING FOR EVALUATION CHECKS:
+- If checks start with "js:", these are JavaScript validation expressions that will be executed in the browser
+- Ensure your HTML elements have the exact IDs, classes, and attributes needed for these checks to pass
+- For "js:" checks, make sure the DOM elements and JavaScript functionality exists as expected
+- Handle ${seed} placeholders in task briefs by replacing them with appropriate values
+
+ATTACHMENT HANDLING:
+- If attachments are provided, process them according to the task requirements
+- Base64 encoded files should be decoded and used as specified in the brief
+- Create appropriate file handling and display functionality
+
+IMPLEMENTATION GUIDELINES:
+- If the task requires interactive elements (buttons, forms, etc.), implement them properly
+- If the task requires calculations, implement the actual calculation logic
+- If the task requires data processing, implement the processing functions
+- If the task requires visual elements, style them appropriately
+- Always implement the EXACT functionality described, not a simplified version
+- Use semantic HTML with proper IDs and classes for automated testing
+- Ensure JavaScript functionality is robust and handles edge cases
 
 RESPONSE FORMAT:
 Your response must be a JSON object with these exact keys:
@@ -98,40 +133,61 @@ Your response must be a JSON object with these exact keys:
 - "script_js": Complete JavaScript file with all functionality described in the task brief
 - "readme_md": Comprehensive documentation explaining the application, how to use it, and any special features
 
+CRITICAL: Return ONLY valid JSON. Use proper JSON string escaping for newlines and quotes. Do NOT use template literals (backticks). Do NOT include any markdown code blocks or extra text outside the JSON.
+
 Each file should be complete, functional, and directly address the requirements in the task brief."""
     
     def _get_revision_prompt(self) -> str:
         """Get system prompt for code revision"""
-        return """You are an expert developer making revisions to existing web applications based on feedback.
+        return """You are an expert full-stack web developer specializing in improving and refining web applications based on feedback and evaluation results.
 
-REQUIREMENTS:
-- Carefully analyze the feedback and current implementation
-- Make appropriate improvements while maintaining core functionality
-- Address specific concerns and enhancement requests
-- Improve code quality, user experience, and functionality
-- Ensure all changes are backwards compatible unless specifically requested otherwise
-- Focus on the specific issues mentioned in the feedback
+CRITICAL REQUIREMENTS:
+- Analyze the current implementation and feedback carefully
+- Make targeted improvements while preserving working functionality
+- Address specific issues, bugs, or enhancement requests mentioned in feedback
+- Improve code quality, user experience, accessibility, and performance
+- Ensure all validation checks continue to pass after improvements
+- Add new features or functionality if requested in feedback
+- Fix any bugs or issues identified in the evaluation
+- Enhance styling, responsiveness, and overall polish
+
+REVISION PRINCIPLES:
+- Maintain backwards compatibility unless explicitly asked to change core behavior
+- Improve error handling and edge case management
+- Enhance user interface and user experience
+- Add proper form validation and input sanitization
+- Improve accessibility (ARIA labels, keyboard navigation, etc.)
+- Optimize performance and code organization
+- Add helpful user feedback and status messages
+- Ensure cross-browser compatibility
+
+SPECIAL HANDLING FOR EVALUATION FEEDBACK:
+- If feedback mentions failed validation checks, ensure those checks pass in the revised version
+- If "js:" checks are mentioned, pay special attention to JavaScript functionality and DOM structure
+- If UI/UX issues are noted, focus on improving the visual design and user interaction
+- If performance issues are mentioned, optimize code and reduce unnecessary operations
+- If accessibility concerns are raised, add proper ARIA attributes and keyboard support
 
 RESPONSE FORMAT:
 Your response must be a JSON object with these exact keys:
-- "index_html": Updated HTML file with improvements
-- "style_css": Updated CSS file with better styling
-- "script_js": Updated JavaScript file with enhanced functionality
-- "readme_md": Updated documentation reflecting the improvements
+- "index_html": Updated HTML file with improvements and fixes
+- "style_css": Updated CSS file with better styling, responsiveness, and visual enhancements
+- "script_js": Updated JavaScript file with enhanced functionality, better error handling, and performance improvements
+- "readme_md": Updated documentation reflecting all improvements, new features, and usage instructions
 
-Ensure all files work together cohesively and address the feedback provided."""
+CRITICAL: Return ONLY valid JSON. Use proper JSON string escaping for newlines and quotes. Do NOT use template literals (backticks). Do NOT include any markdown code blocks or extra text outside the JSON."""
     
-    def generate_code(self, task_brief: str, round_num: int = 1, existing_files: Optional[Dict] = None) -> Dict[str, str]:
+    async def generate_code(self, task_brief: str, round_num: int = 1, existing_files: Optional[Dict] = None, checks: Optional[list] = None, attachments: Optional[list] = None, email: Optional[str] = None) -> Dict[str, str]:
         """Generate code using AI or fallback templates"""
         try:
             if self._can_use_ai():
-                return self._generate_with_ai(task_brief, round_num, existing_files)
+                return await self._generate_with_ai(task_brief, round_num, existing_files, checks, attachments, email)
             else:
-                self.logger.info("Using fallback template generation")
-                return self._generate_with_template(task_brief)
+                self.logger.error("AI service not available and no fallback - cannot generate code")
+                raise Exception("AI service not available - pydantic-ai not installed or configured")
         except Exception as e:
             self.logger.error(f"Code generation failed: {e}")
-            return self._generate_with_template(task_brief)
+            raise Exception(f"Code generation failed: {e}")
     
     def _can_use_ai(self) -> bool:
         """Check if AI generation is available"""
@@ -143,254 +199,209 @@ Ensure all files work together cohesively and address the feedback provided."""
         return (PYDANTIC_AI_AVAILABLE and
                 self._code_generator is not None)
     
-    def _generate_with_ai(self, task_brief: str, round_num: int, existing_files: Optional[Dict]) -> Dict[str, str]:
+    def _process_seed_placeholders(self, text: str, email: Optional[str] = None) -> str:
+        """Process ${seed} placeholders in text"""
+        if not text or "${seed}" not in text:
+            return text
+            
+        # Generate a consistent seed based on email
+        seed = "default"
+        if email:
+            # Extract the numeric part from email for seed
+            import re
+            match = re.search(r'(\d+)', email)
+            if match:
+                seed = match.group(1)[:6]  # Use first 6 digits
+        
+        return text.replace("${seed}", seed)
+    
+    async def _generate_with_ai(self, task_brief: str, round_num: int, existing_files: Optional[Dict], checks: Optional[list] = None, attachments: Optional[list] = None, email: Optional[str] = None) -> Dict[str, str]:
         """Generate code using Pydantic AI"""
         if round_num == 1:
-            user_prompt = f"""TASK BRIEF TO IMPLEMENT:
-{task_brief}
-
-Generate a complete web application that fulfills this exact task. Read the task brief carefully and implement every requirement specified. Do not add unrelated features or assume what the task might be about - build exactly what is described in the task brief."""
+            # Process task brief for seed placeholders
+            processed_brief = self._process_seed_placeholders(task_brief, email)
             
-            result = self._code_generator.run_sync(user_prompt) #type: ignore
-        else:
-            import json
-            user_prompt = f"""REVISION REQUEST:
-Original Task: {task_brief}
+            # Build the prompt with checks if available
+            checks_text = ""
+            if checks:
+                # Process checks for seed placeholders too
+                processed_checks = [self._process_seed_placeholders(check, email) for check in checks]
+                checks_list = "\n".join([f"- {check}" for check in processed_checks])
+                checks_text = f"""
 
-Current Implementation:
+CRITICAL VALIDATION REQUIREMENTS - Your implementation MUST satisfy ALL of these checks:
+{checks_list}
+
+IMPORTANT: 
+- For checks starting with "js:", these are JavaScript expressions that will be executed in the browser to validate your implementation
+- Ensure your HTML elements have the exact IDs, classes, and attributes needed for these checks to pass
+- Each check must be verifiable in the final application"""
+
+            # Build attachments text if available
+            attachments_text = ""
+            if attachments:
+                attachments_info = []
+                for attachment in attachments:
+                    name = attachment.get('name', 'unknown')
+                    url = attachment.get('url', '')
+                    if url.startswith('data:'):
+                        # Extract content type and data
+                        if 'base64,' in url:
+                            content_type = url.split(';')[0].replace('data:', '')
+                            attachments_info.append(f"- {name} ({content_type}): Base64 encoded content provided")
+                        else:
+                            attachments_info.append(f"- {name}: Data URL provided")
+                    else:
+                        attachments_info.append(f"- {name}: {url}")
+                
+                attachments_text = f"""
+
+ATTACHMENTS PROVIDED:
+{chr(10).join(attachments_info)}
+
+IMPORTANT: Process these attachments according to the task requirements. Decode base64 content and use it as specified."""
+
+            user_prompt = f"""TASK BRIEF TO IMPLEMENT:
+{processed_brief}{checks_text}{attachments_text}
+
+Generate a complete web application that fulfills this exact task. Read the task brief carefully and implement every requirement specified. Do not add unrelated features or assume what the task might be about - build exactly what is described in the task brief.
+
+IMPLEMENTATION REQUIREMENTS:
+1. Ensure ALL functionality described in the task brief is working
+2. Validate that every check requirement is met in your implementation (especially "js:" checks)
+3. Include proper event handlers and interactive elements with correct IDs and classes
+4. Process any provided attachments according to the task requirements
+5. Test all buttons, inputs, and user interactions
+6. Make sure the application actually works as specified and passes all validation checks
+
+IMPORTANT: Your response must be valid JSON only. Use this exact format:
+{{"index_html": "<!DOCTYPE html>...", "style_css": "body {{...", "script_js": "// code here", "readme_md": "# title"}}
+
+Make sure to properly escape all quotes and newlines in the JSON strings. Do not use backticks or template literals."""
+            
+            result = await self._code_generator.run(user_prompt) #type: ignore
+        else:
+            # Round 2 - Revision mode
+            import json
+            
+            # Process task brief for seed placeholders in round 2 as well
+            processed_brief = self._process_seed_placeholders(task_brief, email)
+            
+            # Build checks text for round 2 validation
+            checks_text = ""
+            if checks:
+                processed_checks = [self._process_seed_placeholders(check, email) for check in checks]
+                checks_list = "\n".join([f"- {check}" for check in processed_checks])
+                checks_text = f"""
+
+VALIDATION REQUIREMENTS - Your revised implementation MUST satisfy ALL of these checks:
+{checks_list}
+
+CRITICAL: Pay special attention to these validation requirements. If any were failing in the previous version, ensure they pass in your revision."""
+
+            # Build attachments text for round 2
+            attachments_text = ""
+            if attachments:
+                attachments_info = []
+                for attachment in attachments:
+                    name = attachment.get('name', 'unknown')
+                    url = attachment.get('url', '')
+                    if url.startswith('data:'):
+                        if 'base64,' in url:
+                            content_type = url.split(';')[0].replace('data:', '')
+                            attachments_info.append(f"- {name} ({content_type}): Base64 encoded content provided")
+                        else:
+                            attachments_info.append(f"- {name}: Data URL provided")
+                    else:
+                        attachments_info.append(f"- {name}: {url}")
+                
+                attachments_text = f"""
+
+ATTACHMENTS PROVIDED:
+{chr(10).join(attachments_info)}
+
+IMPORTANT: Ensure attachments are properly processed and integrated into the revised application."""
+
+            user_prompt = f"""REVISION REQUEST - ROUND 2 IMPROVEMENTS:
+
+ORIGINAL TASK BRIEF:
+{processed_brief}
+
+CURRENT IMPLEMENTATION TO REVISE:
 {json.dumps(existing_files or {}, indent=2)}
 
-Please revise the application based on feedback and improve it significantly. Address any issues or enhancement requests while maintaining the core functionality."""
+IMPROVEMENT INSTRUCTIONS:
+This is Round 2 - you need to significantly improve the existing application. Common areas for enhancement include:
+
+1. **Bug Fixes**: Fix any functional issues, JavaScript errors, or broken features
+2. **User Experience**: Improve the interface, add better visual feedback, enhance usability
+3. **Functionality**: Add more features, better error handling, input validation
+4. **Design**: Enhance the visual appearance, improve responsive design, add animations
+5. **Performance**: Optimize code, reduce redundancy, improve efficiency
+6. **Accessibility**: Add ARIA labels, keyboard navigation, better semantic HTML
+7. **Robustness**: Handle edge cases, add proper form validation, improve error messages
+
+{checks_text}{attachments_text}
+
+SPECIFIC REVISION REQUIREMENTS:
+- Maintain all existing functionality that works correctly
+- Significantly improve the user interface and user experience
+- Add proper error handling and user feedback
+- Ensure all validation checks pass
+- Make the application more polished and professional
+- Add helpful features that enhance the core functionality
+- Improve code organization and comments
+
+IMPORTANT: Your response must be valid JSON only. Use this exact format:
+{{"index_html": "<!DOCTYPE html>...", "style_css": "body {{...", "script_js": "// code here", "readme_md": "# title"}}
+
+Make sure to properly escape all quotes and newlines in the JSON strings. Do not use backticks or template literals."""
             
-            result = self._code_reviser.run_sync(user_prompt) #type: ignore
+            result = await self._code_reviser.run(user_prompt) #type: ignore
         
-        return {
-            "index.html": result.data.index_html,
-            "style.css": result.data.style_css,
-            "script.js": result.data.script_js,
-            "README.md": result.data.readme_md
-        }
-    
-    def _generate_with_template(self, task_brief: str) -> Dict[str, str]:
-        """Generate code using adaptive templates"""
-        generator = TemplateGenerator()
-        return generator.generate_adaptive_template(task_brief)
-
-
-class TemplateGenerator:
-    """Fallback template generator"""
-    
-    def generate_adaptive_template(self, task_brief: str) -> Dict[str, str]:
-        """Generate a basic adaptive template based on the task brief"""
-        task_name = self._extract_task_name(task_brief)
-        
-        return {
-            "index.html": self._generate_html(task_name, task_brief),
-            "style.css": self._generate_css(),
-            "script.js": self._generate_js(task_brief),
-            "README.md": self._generate_readme(task_name, task_brief)
-        }
-    
-    def _extract_task_name(self, task_brief: str) -> str:
-        """Extract a suitable task name from the brief"""
-        words = task_brief.split()[:3]
-        return " ".join(word.strip(".,!?") for word in words if word.isalpha())
-    
-    def _generate_html(self, task_name: str, task_brief: str) -> str:
-        """Generate adaptive HTML template"""
-        return f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{task_name}</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="container">
-        <h1>{task_name}</h1>
-        <div class="app-section">
-            <div class="description">
-                <p>{task_brief}</p>
-            </div>
-            <div class="main-functionality">
-                <div class="input-section">
-                    <input type="text" id="main-input" placeholder="Enter input here">
-                    <button onclick="processInput()">Process</button>
-                </div>
-                <div class="output-section">
-                    <div id="output" class="output"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="script.js"></script>
-</body>
-</html>'''
-    
-    def _generate_css(self) -> str:
-        """Generate adaptive CSS template"""
-        return '''* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Arial', sans-serif;
-    line-height: 1.6;
-    color: #333;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.container {
-    background: white;
-    border-radius: 10px;
-    padding: 2rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    max-width: 800px;
-    width: 90%;
-}
-
-h1 {
-    text-align: center;
-    margin-bottom: 2rem;
-    color: #333;
-}
-
-.app-section {
-    margin-bottom: 1.5rem;
-}
-
-.description {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 5px;
-    margin-bottom: 1rem;
-    border-left: 4px solid #667eea;
-}
-
-.input-section {
-    margin-bottom: 1rem;
-}
-
-input[type="text"], input[type="url"] {
-    width: 70%;
-    padding: 0.75rem;
-    border: 2px solid #ddd;
-    border-radius: 5px;
-    margin-right: 10px;
-    font-size: 1rem;
-}
-
-button {
-    background: #667eea;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background 0.3s;
-}
-
-button:hover:not(:disabled) {
-    background: #5a6fd8;
-}
-
-.output {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 5px;
-    padding: 1rem;
-    min-height: 100px;
-    white-space: pre-wrap;
-}
-
-.output.success {
-    background: #d4edda;
-    border-color: #c3e6cb;
-    color: #155724;
-}
-
-.output.error {
-    background: #f8d7da;
-    border-color: #f5c6cb;
-    color: #721c24;
-}'''
-    
-    def _generate_js(self, task_brief: str) -> str:
-        """Generate adaptive JavaScript template"""
-        task_name = self._extract_task_name(task_brief)
-        return f'''// {task_name} Application
-// Task: {task_brief}
-
-function processInput() {{
-    const input = document.getElementById('main-input').value;
-    const output = document.getElementById('output');
-    
-    if (!input.trim()) {{
-        output.textContent = 'Please enter some input';
-        output.className = 'output error';
-        return;
-    }}
-    
-    try {{
-        const result = performTaskSpecificProcessing(input);
-        output.textContent = result;
-        output.className = 'output success';
-    }} catch (error) {{
-        output.textContent = 'Error processing input: ' + error.message;
-        output.className = 'output error';
-    }}
-}}
-
-function performTaskSpecificProcessing(input) {{
-    // This function should be customized based on the specific task
-    return `Processed: ${{input}} - Task completed successfully!`;
-}}
-
-// Initialize the application
-document.addEventListener('DOMContentLoaded', function() {{
-    console.log('Application initialized');
-    
-    // Check for URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const inputParam = urlParams.get('input') || urlParams.get('url');
-    if (inputParam) {{
-        document.getElementById('main-input').value = inputParam;
-    }}
-}});'''
-    
-    def _generate_readme(self, task_name: str, task_brief: str) -> str:
-        """Generate adaptive README template"""
-        return f'''# {task_name}
-
-## Description
-{task_brief}
-
-## Features
-- Responsive web interface
-- Input processing functionality
-- Error handling and user feedback
-- URL parameter support
-
-## Usage
-1. Open the application in a web browser
-2. Enter your input in the text field
-3. Click "Process" to execute the main functionality
-4. View the results in the output section
-
-## File Structure
-- `index.html` - Main application interface
-- `style.css` - Styling and responsive design
-- `script.js` - Application logic and functionality
-- `README.md` - This documentation
-
-## Technical Details
-This application is built with vanilla HTML, CSS, and JavaScript for maximum compatibility and performance.
-'''
+        # Get the AI output - it's in JSON format
+        import json
+        import re
+        try:
+            # The output is a JSON string containing the files
+            if hasattr(result, 'output'):
+                output_text = result.output
+                self.logger.info(f"Raw AI output: {output_text[:200]}...")
+                
+                # Extract JSON from the output (it might be wrapped in ```json blocks)
+                if '```json' in output_text:
+                    start = output_text.find('```json') + 7
+                    end = output_text.find('```', start)
+                    json_text = output_text[start:end].strip()
+                else:
+                    json_text = output_text.strip()
+                
+                # Fix template literals (backticks) to proper JSON strings
+                # This handles multiline strings that use backticks properly
+                def replace_template_literal(match):
+                    content = match.group(1)
+                    # Properly escape the content for JSON
+                    return json.dumps(content)
+                
+                # Replace template literals with proper JSON strings
+                json_text = re.sub(r'`((?:[^`\\]|\\.)*)(?<!\\)`', replace_template_literal, json_text, flags=re.DOTALL)
+                
+                # Parse the JSON
+                result_data = json.loads(json_text)
+                
+                return {
+                    "index.html": result_data.get('index_html', ''),
+                    "style.css": result_data.get('style_css', ''),
+                    "script.js": result_data.get('script_js', ''),
+                    "README.md": result_data.get('readme_md', '')
+                }
+            else:
+                raise Exception("No output found in AI result")
+                
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse AI JSON output: {e}")
+            self.logger.error(f"Raw output: {result.output}")
+            raise Exception(f"AI returned invalid JSON: {e}")
+        except Exception as e:
+            self.logger.error(f"Error processing AI result: {e}")
+            raise Exception(f"Failed to process AI result: {e}")

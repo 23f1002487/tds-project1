@@ -190,6 +190,9 @@ task_responses/
 # Test artifacts
 test_output/
 test_results/
+test*
+simulate*
+
 
 # Temporary files
 *.tmp
