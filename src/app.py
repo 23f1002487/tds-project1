@@ -37,25 +37,48 @@ from .Config.config import config
 # Configure logging with robust error handling
 import os
 try:
-    # Ensure log file is in the root directory (accessible via HF Files tab)
-    log_file_path = config.log_file
-    if not os.path.isabs(log_file_path):
-        # Make sure it's in the current working directory (root of HF Space)
-        log_file_path = os.path.join(os.getcwd(), config.log_file)
+    # Try multiple writable locations for HF Spaces
+    possible_log_locations = [
+        config.log_file,  # Original location
+        "/tmp/task_log.txt",  # /tmp is usually writable
+        "/home/user/task_log.txt",  # HF Spaces user home
+        "./logs/task_log.txt",  # Local logs directory
+        "task_log.txt"  # Current directory fallback
+    ]
     
-    # Create log directory if needed
-    log_dir = os.path.dirname(log_file_path)
-    if log_dir:
-        os.makedirs(log_dir, exist_ok=True)
+    log_file_path = None
+    for log_path in possible_log_locations:
+        try:
+            # Test if we can write to this location
+            test_dir = os.path.dirname(log_path) if os.path.dirname(log_path) else "."
+            if os.access(test_dir, os.W_OK):
+                # Create directory if needed
+                if os.path.dirname(log_path):
+                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                log_file_path = log_path
+                break
+        except Exception:
+            continue
     
-    # Configure file logging
-    logging.basicConfig(
-        filename=log_file_path,
-        level=getattr(logging, config.log_level),
-        format="%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(funcName)s() - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        force=True
-    )
+    if log_file_path:
+        # Configure file logging
+        logging.basicConfig(
+            filename=log_file_path,
+            level=getattr(logging, config.log_level),
+            format="%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(funcName)s() - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            force=True
+        )
+        print(f"✅ Logging to file: {log_file_path}")
+    else:
+        # No writable location found, use console only
+        logging.basicConfig(
+            level=getattr(logging, config.log_level),
+            format="%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(funcName)s() - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            force=True
+        )
+        print("⚠️  No writable log location found, using console only")
     
     # Also add console handler for immediate feedback
     console_handler = logging.StreamHandler()
@@ -65,8 +88,8 @@ try:
     )
     logging.getLogger().addHandler(console_handler)
     
-    # Write initial log entry to ensure file is created
-    logging.info(f"Logging initialized - file: {log_file_path}")
+    # Write initial log entry
+    logging.info(f"Logging initialized - file: {log_file_path or 'console only'}")
         
 except Exception as e:
     # Fall back to console logging if anything goes wrong
@@ -91,11 +114,11 @@ logging.info("="*50)
 logging.info("Student Task Processor API starting up")
 logging.info(f"Python working directory: {os.getcwd()}")
 logging.info(f"Log level: {config.log_level}")
-logging.info(f"Log file: {config.log_file}")
-logging.info(f"Log file absolute path: {os.path.abspath(config.log_file)}")
-logging.info(f"Log file exists: {os.path.exists(config.log_file)}")
+logging.info(f"Configured log file: {config.log_file}")
+logging.info(f"User ID: {os.getuid() if hasattr(os, 'getuid') else 'N/A'}")
+logging.info(f"Writable directories checked: /tmp, /home/user, ./logs, current dir")
 logging.info("Available endpoints: /process_task, /health, /, /logs")
-logging.info("📁 Log file accessible via HF Spaces Files tab")
+logging.info("📁 Note: Log file location depends on HF Spaces permissions")
 logging.info("="*50)
 
 
@@ -175,12 +198,73 @@ async def root():
         "description": "AI-powered web application generator for educational tasks",
         "endpoints": {
             "process_task": "POST /process_task - Process student task requests",
-            "health": "GET /health - Check service health status"
+            "health": "GET /health - Check service health status",
+            "logs": "GET /logs?lines=50 - Get recent application logs"
         },
         "documentation": "/docs"
     }
     logging.debug(f"Root endpoint response: {response}")
     return response
+
+
+@app.get("/logs")
+async def get_logs(lines: int = 50):
+    """
+    Get recent application logs for debugging.
+    
+    Args:
+        lines: Number of recent log lines to return (default: 50, max: 200)
+        
+    Returns:
+        dict: Recent log entries and file information
+    """
+    logging.debug(f"Logs endpoint called, requesting {lines} lines")
+    
+    try:
+        lines = min(lines, 200)  # Limit to prevent abuse
+        
+        # Try to find log file in possible locations
+        possible_locations = [
+            "/tmp/task_log.txt",
+            "/home/user/task_log.txt", 
+            "./logs/task_log.txt",
+            "task_log.txt",
+            config.log_file
+        ]
+        
+        found_log = None
+        for log_path in possible_locations:
+            if os.path.exists(log_path):
+                found_log = log_path
+                break
+        
+        if found_log:
+            with open(found_log, 'r') as f:
+                all_lines = f.readlines()
+                recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+                
+            return {
+                "status": "success",
+                "log_file": found_log,
+                "total_lines": len(all_lines),
+                "returned_lines": len(recent_lines),
+                "logs": [line.strip() for line in recent_lines]
+            }
+        else:
+            return {
+                "status": "no_file",
+                "message": "No log file found - console logging only",
+                "searched_locations": possible_locations,
+                "note": "Check HF Spaces Logs tab for console output"
+            }
+            
+    except Exception as e:
+        logging.error(f"Error reading logs: {e}")
+        return {
+            "status": "error", 
+            "message": f"Error reading logs: {str(e)}",
+            "note": "Check HF Spaces Logs tab for console output"
+        }
 
 
 if __name__ == "__main__":

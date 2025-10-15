@@ -34,7 +34,7 @@ class Config:
     github_token: str
     openai_token: Optional[str] = None
     aipipe_url: Optional[str] = None
-    log_file: str = "task_log.txt"
+    log_file: str = "/tmp/task_log.txt"
     log_level: str = "DEBUG"
     
     @classmethod
