@@ -88,4 +88,4 @@ Perfect for instructors and students working on web development projects. Stream
 
 ---
 
-*Powered by FastAPI, Pydantic AI, and GitHub API*
+*Powered by FastAPI, Pydantic AI, and GitHub API*# Health endpoint debug - Wed Oct 15 10:42:10 WAT 2025
