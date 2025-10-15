@@ -37,25 +37,43 @@ from .Config.config import config
 # Configure logging with robust error handling
 import os
 try:
-    # Try to create logs directory if it doesn't exist
-    log_dir = os.path.dirname(config.log_file) or "/tmp"
-    os.makedirs(log_dir, exist_ok=True)
+    # Ensure log file is in the root directory (accessible via HF Files tab)
+    log_file_path = config.log_file
+    if not os.path.isabs(log_file_path):
+        # Make sure it's in the current working directory (root of HF Space)
+        log_file_path = os.path.join(os.getcwd(), config.log_file)
     
-    # Try to use the configured log file, fall back to console if permission denied
-    log_file = config.log_file if os.access(os.path.dirname(config.log_file) or ".", os.W_OK) else None
+    # Create log directory if needed
+    log_dir = os.path.dirname(log_file_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
     
+    # Configure file logging
     logging.basicConfig(
-        filename=log_file,
+        filename=log_file_path,
         level=getattr(logging, config.log_level),
-        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+        format="%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(funcName)s() - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
         force=True
     )
+    
+    # Also add console handler for immediate feedback
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(message)s", 
+                         "%Y-%m-%d %H:%M:%S")
+    )
+    logging.getLogger().addHandler(console_handler)
+    
+    # Write initial log entry to ensure file is created
+    logging.info(f"Logging initialized - file: {log_file_path}")
         
 except Exception as e:
     # Fall back to console logging if anything goes wrong
     logging.basicConfig(
-        level=getattr(logging, config.log_level, logging.INFO),
-        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+        level=getattr(logging, config.log_level, logging.DEBUG),
+        format="%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(funcName)s() - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
         force=True
     )
     logging.warning(f"Logging setup failed, using console: {e}")
@@ -67,6 +85,18 @@ app = FastAPI(
     description="AI-powered web application generator for student tasks"
 )
 task_processor = TaskProcessor()
+
+# Log application startup
+logging.info("="*50)
+logging.info("Student Task Processor API starting up")
+logging.info(f"Python working directory: {os.getcwd()}")
+logging.info(f"Log level: {config.log_level}")
+logging.info(f"Log file: {config.log_file}")
+logging.info(f"Log file absolute path: {os.path.abspath(config.log_file)}")
+logging.info(f"Log file exists: {os.path.exists(config.log_file)}")
+logging.info("Available endpoints: /process_task, /health, /, /logs")
+logging.info("📁 Log file accessible via HF Spaces Files tab")
+logging.info("="*50)
 
 
 @app.post("/process_task")
@@ -113,12 +143,22 @@ async def health_check():
         dict: Health status including AI availability, GitHub configuration,
               and overall system health
     """
-    return {
+    logging.debug("Health endpoint called")
+    try:
+        ai_available = task_processor.ai_service._can_use_ai()
+        logging.debug(f"AI availability check result: {ai_available}")
+    except Exception as e:
+        logging.warning(f"Error checking AI availability: {e}")
+        ai_available = False
+        
+    health_status = {
         "status": "healthy",
-        "ai_available": task_processor.ai_service._can_use_ai(),
+        "ai_available": ai_available,
         "github_configured": bool(config.github_token != "..."),
         "config_loaded": True
     }
+    logging.debug(f"Health check response: {health_status}")
+    return health_status
 
 @app.get("/")
 async def root():
@@ -128,7 +168,8 @@ async def root():
     Returns:
         dict: API metadata and endpoint documentation
     """
-    return {
+    logging.debug("Root endpoint called")
+    response = {
         "message": "Student Task Processor API",
         "version": "1.0.0",
         "description": "AI-powered web application generator for educational tasks",
@@ -138,6 +179,8 @@ async def root():
         },
         "documentation": "/docs"
     }
+    logging.debug(f"Root endpoint response: {response}")
+    return response
 
 
 if __name__ == "__main__":
