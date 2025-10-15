@@ -27,14 +27,14 @@ class Config:
         github_token: GitHub personal access token for repository operations
         openai_token: OpenAI API key for AI services (optional)
         aipipe_url: Custom API base URL (optional)
-        log_file: Path to log file (default: task_log.txt)
+        log_file: Path to log file (default: logs/task_log.txt)
         log_level: Logging level (default: DEBUG)
     """
     secret_key: str
     github_token: str
     openai_token: Optional[str] = None
     aipipe_url: Optional[str] = None
-    log_file: str = "/tmp/task_log.txt"
+    log_file: str = "logs/task_log.txt"
     log_level: str = "DEBUG"
     
     @classmethod

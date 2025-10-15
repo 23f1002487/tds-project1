@@ -37,27 +37,35 @@ from .Config.config import config
 # Configure logging with robust error handling
 import os
 try:
-    # Try multiple writable locations for HF Spaces
+    # Try multiple writable locations for HF Spaces (prioritize persistent workspace)
     possible_log_locations = [
+        "/app/logs/task_log.txt",  # HF Spaces persistent workspace
+        "./logs/task_log.txt",  # Local logs directory (persistent)
+        "/app/task_log.txt",  # Root of HF workspace
+        "task_log.txt",  # Current directory
         config.log_file,  # Original location
-        "/tmp/task_log.txt",  # /tmp is usually writable
-        "/home/user/task_log.txt",  # HF Spaces user home
-        "./logs/task_log.txt",  # Local logs directory
-        "task_log.txt"  # Current directory fallback
+        "/tmp/task_log.txt",  # /tmp as last resort (not visible in Files tab)
     ]
     
     log_file_path = None
     for log_path in possible_log_locations:
         try:
+            # Create directory if needed
+            log_dir = os.path.dirname(log_path)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+                print(f"📁 Created/verified directory: {log_dir}")
+            
             # Test if we can write to this location
             test_dir = os.path.dirname(log_path) if os.path.dirname(log_path) else "."
             if os.access(test_dir, os.W_OK):
-                # Create directory if needed
-                if os.path.dirname(log_path):
-                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 log_file_path = log_path
+                print(f"✅ Selected log location: {log_file_path}")
                 break
-        except Exception:
+            else:
+                print(f"❌ No write access: {log_path}")
+        except Exception as e:
+            print(f"❌ Failed to access {log_path}: {e}")
             continue
     
     if log_file_path:
@@ -116,9 +124,9 @@ logging.info(f"Python working directory: {os.getcwd()}")
 logging.info(f"Log level: {config.log_level}")
 logging.info(f"Configured log file: {config.log_file}")
 logging.info(f"User ID: {os.getuid() if hasattr(os, 'getuid') else 'N/A'}")
-logging.info(f"Writable directories checked: /tmp, /home/user, ./logs, current dir")
+logging.info(f"Writable directories priority: /app/logs, ./logs, /app, current dir, /tmp")
 logging.info("Available endpoints: /process_task, /health, /, /logs")
-logging.info("📁 Note: Log file location depends on HF Spaces permissions")
+logging.info("📁 Log file in persistent workspace will be visible in HF Files tab")
 logging.info("="*50)
 
 
@@ -223,13 +231,14 @@ async def get_logs(lines: int = 50):
     try:
         lines = min(lines, 200)  # Limit to prevent abuse
         
-        # Try to find log file in possible locations
+        # Try to find log file in possible locations (prioritize persistent workspace)
         possible_locations = [
-            "/tmp/task_log.txt",
-            "/home/user/task_log.txt", 
-            "./logs/task_log.txt",
-            "task_log.txt",
-            config.log_file
+            "/app/logs/task_log.txt",  # HF Spaces persistent workspace logs
+            "./logs/task_log.txt",     # Local logs directory
+            "/app/task_log.txt",       # Root of HF workspace
+            "task_log.txt",            # Current directory
+            config.log_file,           # Original config location
+            "/tmp/task_log.txt",       # Temporary location (last resort)
         ]
         
         found_log = None
