@@ -235,6 +235,7 @@ class TaskProcessor:
         self.logger.info(f"Submitting complete results to evaluation URL: {evaluation_url}")
         
         payload = {
+            "email": result.email,
             "task": result.task,
             "round": result.round,
             "nonce": result.nonce,
