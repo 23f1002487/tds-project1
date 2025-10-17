@@ -215,6 +215,49 @@ CRITICAL: Return ONLY valid JSON. Use proper JSON string escaping for newlines a
         
         return text.replace("${seed}", seed)
     
+    def _extract_json_fields_manually(self, text: str) -> Optional[Dict[str, str]]:
+        """
+        Manually extract JSON fields when standard parsing fails.
+        This is a fallback for malformed JSON from AI responses.
+        """
+        import re
+        try:
+            result = {}
+            
+            # Extract each field using regex patterns
+            # Pattern: "field_name": "content..." (handles multiline)
+            fields = ['index_html', 'style_css', 'script_js', 'readme_md']
+            
+            for field in fields:
+                # Find the field and extract its value
+                # Pattern matches: "field": "value" or "field": "multiline\nvalue"
+                pattern = rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)(?<!\\)"'
+                match = re.search(pattern, text, re.DOTALL)
+                
+                if match:
+                    # Get the matched content and unescape it
+                    content = match.group(1)
+                    # Unescape JSON escape sequences
+                    content = content.replace('\\n', '\n')
+                    content = content.replace('\\t', '\t')
+                    content = content.replace('\\"', '"')
+                    content = content.replace('\\\\', '\\')
+                    result[field] = content
+                else:
+                    self.logger.warning(f"Could not extract field: {field}")
+                    result[field] = ""
+            
+            # Only return if we got at least index_html
+            if result.get('index_html'):
+                self.logger.info("Successfully extracted fields manually")
+                return result
+            else:
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Manual extraction failed: {e}")
+            return None
+    
     async def _generate_with_ai(self, task_brief: str, round_num: int, existing_files: Optional[Dict], checks: Optional[list] = None, attachments: Optional[list] = None, email: Optional[str] = None) -> Dict[str, str]:
         """Generate code using Pydantic AI"""
         if round_num == 1:
@@ -386,8 +429,70 @@ Make sure to properly escape all quotes and newlines in the JSON strings. Do not
                 # Replace template literals with proper JSON strings
                 json_text = re.sub(r'`((?:[^`\\]|\\.)*)(?<!\\)`', replace_template_literal, json_text, flags=re.DOTALL)
                 
-                # Parse the JSON
-                result_data = json.loads(json_text)
+                # Additional JSON fixes for common AI errors
+                # Fix unescaped newlines in string values (common with base64)
+                # This regex finds string values that contain literal newlines and fixes them
+                def fix_multiline_strings(text):
+                    # Find patterns like: "key": "value with
+                    # newline"
+                    # And convert to: "key": "value with\\nnewline"
+                    lines = text.split('\n')
+                    result_lines = []
+                    in_string = False
+                    string_start_char = None
+                    
+                    for i, line in enumerate(lines):
+                        # Track if we're inside a JSON string value
+                        # This is a simplified approach - count quotes
+                        fixed_line = line
+                        
+                        # Check if previous line ended with an incomplete string
+                        if in_string and i > 0:
+                            # This line is continuation of a string - escape it
+                            fixed_line = line.replace('"', '\\"')
+                            # Add back to previous line with escaped newline
+                            result_lines[-1] = result_lines[-1].rstrip() + '\\n' + fixed_line
+                            
+                            # Check if string ends on this line
+                            if '"' in line and not line.rstrip().endswith('\\'):
+                                in_string = False
+                            continue
+                        
+                        # Check if this line starts a multiline string
+                        # Pattern: "key": "value... (no closing quote)
+                        if '": "' in line or "': '" in line:
+                            quote_char = '"' if '": "' in line else "'"
+                            parts = line.split(f'{quote_char}: {quote_char}')
+                            if len(parts) > 1:
+                                value_part = parts[-1]
+                                # Count quotes to see if string is closed
+                                quote_count = value_part.count(quote_char)
+                                # If odd number, string continues to next line
+                                if quote_count % 2 == 0 and not value_part.rstrip().endswith(quote_char):
+                                    in_string = True
+                                    string_start_char = quote_char
+                        
+                        result_lines.append(fixed_line)
+                    
+                    return '\n'.join(result_lines)
+                
+                # Try to parse directly first
+                try:
+                    result_data = json.loads(json_text)
+                except json.JSONDecodeError as first_error:
+                    self.logger.warning(f"Initial JSON parse failed: {first_error}, attempting fixes...")
+                    
+                    # Try fixing multiline strings
+                    try:
+                        fixed_json = fix_multiline_strings(json_text)
+                        result_data = json.loads(fixed_json)
+                        self.logger.info("Successfully parsed JSON after multiline fix")
+                    except json.JSONDecodeError as second_error:
+                        # Last resort: try to extract individual fields manually
+                        self.logger.warning(f"Multiline fix failed: {second_error}, attempting manual extraction...")
+                        result_data = self._extract_json_fields_manually(json_text)
+                        if not result_data:
+                            raise first_error  # Re-raise original error
                 
                 return {
                     "index.html": result_data.get('index_html', ''),
