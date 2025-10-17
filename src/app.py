@@ -130,6 +130,30 @@ logging.info("📁 Log file in persistent workspace will be visible in HF Files 
 logging.info("="*50)
 
 
+@app.get("/process_task")
+async def process_task_get():
+    """
+    GET request handler for /process_task - provides helpful error message.
+    
+    This endpoint only accepts POST requests. This handler helps users who
+    accidentally use GET instead of POST.
+    """
+    return {
+        "error": "Method Not Allowed",
+        "message": "This endpoint only accepts POST requests",
+        "correct_usage": {
+            "method": "POST",
+            "url": "/process_task",
+            "content_type": "application/json",
+            "required_fields": [
+                "email", "secret", "task", "round", "nonce", 
+                "brief", "checks", "evaluation_url"
+            ]
+        },
+        "documentation": "/docs"
+    }
+
+
 @app.post("/process_task")
 async def process_task(task_request: TaskRequest) -> dict:
     """

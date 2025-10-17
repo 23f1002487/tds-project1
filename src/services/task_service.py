@@ -17,6 +17,7 @@ import logging
 import asyncio
 import requests
 import uuid
+import time
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from ..Models.models import TaskRequest, TaskResponse, CodeFile, GeneratedCode
@@ -40,6 +41,38 @@ class TaskProcessor:
         self.github_service = GitHubService()
         # Track background tasks
         self.processing_tasks: Dict[str, dict] = {}
+    
+    def _post_with_retry(self, url: str, payload: dict, max_retries: int = 3, timeout: int = 30) -> Optional[requests.Response]:
+        """
+        POST request with exponential backoff retry for transient failures.
+        
+        Args:
+            url: URL to POST to
+            payload: JSON payload
+            max_retries: Maximum number of retry attempts
+            timeout: Request timeout in seconds
+            
+        Returns:
+            Response object if successful, None if all retries failed
+        """
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, json=payload, timeout=timeout)
+                return response
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                    self.logger.warning(f"Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                    self.logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    self.logger.error(f"All {max_retries} attempts failed: {e}")
+                    raise
+            except requests.RequestException as e:
+                # Non-retryable error
+                self.logger.error(f"Non-retryable request error: {e}")
+                raise
+        return None
     
     def validate_credentials(self, secret: str) -> None:
         """
@@ -246,11 +279,17 @@ class TaskProcessor:
         }
         
         try:
-            response = requests.post(evaluation_url, json=payload, timeout=30)
-            if response.status_code == 200:
+            response = self._post_with_retry(evaluation_url, payload, max_retries=3, timeout=30)
+            if response and response.status_code == 200:
                 self.logger.info("Complete results submitted successfully")
-            else:
+            elif response:
                 self.logger.warning(f"Failed to submit complete results: {response.status_code}")
+        except requests.exceptions.ConnectionError as e:
+            self.logger.error(f"Network error submitting complete results (DNS/connection failed): {e}")
+            self.logger.info("Task processing completed successfully but evaluation notification failed due to network issues")
+        except requests.exceptions.Timeout as e:
+            self.logger.error(f"Timeout submitting complete results: {e}")
+            self.logger.info("Task processing completed successfully but evaluation notification timed out")
         except requests.RequestException as e:
             self.logger.error(f"Error submitting complete results: {e}")
     
@@ -259,6 +298,7 @@ class TaskProcessor:
         self.logger.info(f"Submitting error results to evaluation URL: {evaluation_url}")
         
         payload = {
+            "email": task_request.email,
             "task": task_request.task,
             "round": task_request.round,
             "nonce": task_request.nonce,
@@ -267,10 +307,16 @@ class TaskProcessor:
         }
         
         try:
-            response = requests.post(evaluation_url, json=payload, timeout=30)
-            if response.status_code == 200:
+            response = self._post_with_retry(evaluation_url, payload, max_retries=3, timeout=30)
+            if response and response.status_code == 200:
                 self.logger.info("Error results submitted successfully")
-            else:
+            elif response:
                 self.logger.warning(f"Failed to submit error results: {response.status_code}")
+        except requests.exceptions.ConnectionError as e:
+            self.logger.error(f"Network error submitting error results (DNS/connection failed): {e}")
+            self.logger.info("Task processing completed but evaluation notification failed due to network issues")
+        except requests.exceptions.Timeout as e:
+            self.logger.error(f"Timeout submitting error results: {e}")
+            self.logger.info("Task processing completed but evaluation notification timed out")
         except requests.RequestException as e:
             self.logger.error(f"Error submitting error results: {e}")
