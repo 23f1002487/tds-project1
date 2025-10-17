@@ -39,6 +39,7 @@ class GitHubService:
     def create_repository(self, repo_name: str) -> str:
         """
         Create a GitHub repository and return the repository URL.
+        Handles duplicate repository names by adding unique suffixes.
         
         Args:
             repo_name: Name for the new repository
@@ -47,30 +48,70 @@ class GitHubService:
             str: HTML URL of the created repository
             
         Raises:
-            Exception: If repository creation fails
+            Exception: If repository creation fails after all retries
         """
-        self.logger.info(f"Creating GitHub repository: {repo_name}")
+        import random
+        import time
         
-        payload = {
-            "name": repo_name,
-            "private": False,
-            "auto_init": True,
-            "license_template": "mit"
-        }
+        original_name = repo_name
+        max_attempts = 5
         
-        response = requests.post(
-            "https://api.github.com/user/repos",
-            headers=self.headers,
-            json=payload
-        )
+        for attempt in range(1, max_attempts + 1):
+            current_name = repo_name
+            
+            if attempt > 1:
+                # Generate unique suffix for retry attempts
+                timestamp = int(time.time() * 1000) % 100000  # Last 5 digits of timestamp
+                random_suffix = random.randint(1000, 9999)
+                current_name = f"{original_name}-{timestamp}-{random_suffix}"
+                self.logger.warning(f"Repository name conflict detected. Attempt {attempt}/{max_attempts} with new name: {current_name}")
+            else:
+                self.logger.info(f"Creating GitHub repository: {current_name}")
+            
+            payload = {
+                "name": current_name,
+                "private": False,
+                "auto_init": True,
+                "license_template": "mit"
+            }
+            
+            response = requests.post(
+                "https://api.github.com/user/repos",
+                headers=self.headers,
+                json=payload
+            )
+            
+            if response.status_code == 201:
+                repo_url = response.json()["html_url"]
+                if attempt > 1:
+                    self.logger.info(f"GitHub repository created successfully with alternative name: {repo_url}")
+                    self.logger.info(f"Original name '{original_name}' was already taken, used '{current_name}' instead")
+                else:
+                    self.logger.info(f"GitHub repository created successfully: {repo_url}")
+                return repo_url
+            
+            # Check if it's a duplicate name error
+            response_data = response.json()
+            is_duplicate = False
+            
+            if response.status_code == 422 and "errors" in response_data:
+                for error in response_data["errors"]:
+                    if error.get("field") == "name" and "already exists" in error.get("message", "").lower():
+                        is_duplicate = True
+                        break
+            
+            if is_duplicate:
+                self.logger.warning(f"Repository name '{current_name}' already exists. Will retry with unique suffix...")
+                time.sleep(0.5)  # Small delay before retry
+                continue
+            else:
+                # Different error, don't retry
+                self.logger.error(f"Failed to create GitHub repository: {response_data}")
+                raise Exception(f"GitHub repository creation failed: {response_data.get('message', 'Unknown error')}")
         
-        if response.status_code != 201:
-            self.logger.error(f"Failed to create GitHub repository: {response.json()}")
-            raise Exception("GitHub repository creation failed")
-        
-        repo_url = response.json()["html_url"]
-        self.logger.info(f"GitHub repository created successfully: {repo_url}")
-        return repo_url
+        # All attempts exhausted
+        self.logger.error(f"Failed to create repository after {max_attempts} attempts")
+        raise Exception(f"GitHub repository creation failed: Unable to generate unique repository name after {max_attempts} attempts")
     
     def upload_files(self, repo_url: str, files: List[CodeFile]) -> str:
         """Upload files to GitHub repository and return commit SHA"""
